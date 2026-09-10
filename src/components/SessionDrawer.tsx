@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,8 +27,21 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
   onNewSession,
   onOpenSettings,
 }) => {
-  const sessions = sessionManager.getAllSessionMetas();
-  const activeSession = sessionManager.getActiveSession();
+  const [sessions, setSessions] = useState<SessionMeta[]>(() => sessionManager.getAllSessionMetas());
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => sessionManager.getActiveSession().id);
+
+  // 监听全局会话变化（创建、切换、删除等），保证列表实时同步刷新
+  useEffect(() => {
+    const update = () => {
+      setSessions(sessionManager.getAllSessionMetas());
+      setActiveSessionId(sessionManager.getActiveSession().id);
+    };
+    update();
+    const unsubscribe = sessionManager.subscribe(update);
+    return () => {
+      unsubscribe();
+    };
+  }, [visible]);
 
   const formatTime = (ts: number): string => {
     const diff = Date.now() - ts;
@@ -50,6 +63,9 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
         style: 'destructive',
         onPress: async () => {
           await sessionManager.deleteSession(s.id);
+          // 立即就地更新状态，毫秒级局部刷新列表
+          setSessions(sessionManager.getAllSessionMetas());
+          setActiveSessionId(sessionManager.getActiveSession().id);
         },
       },
     ]);
@@ -94,7 +110,7 @@ export const SessionDrawer: React.FC<SessionDrawerProps> = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
-              const isActive = item.id === activeSession.id;
+              const isActive = item.id === activeSessionId;
               return (
                 <TouchableOpacity
                   style={[styles.sessionItem, isActive && styles.sessionItemActive]}

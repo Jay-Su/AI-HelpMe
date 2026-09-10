@@ -132,20 +132,22 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
         </View>
       )}
 
-      {/* 消息正文气泡（支持长按复制，对齐 PocketPal 体验） */}
-      <TouchableOpacity
-        style={[styles.bubble, isUser ? styles.userBubble : styles.mentorBubble]}
-        onLongPress={handleCopy}
-        delayLongPress={350}
-        activeOpacity={0.92}
-      >
-        {isUser ? (
+      {/* 消息正文气泡 */}
+      {isUser ? (
+        <TouchableOpacity
+          style={[styles.bubble, styles.userBubble]}
+          onLongPress={handleCopy}
+          delayLongPress={350}
+          activeOpacity={0.92}
+        >
           <Text style={styles.userMessageText}>{message.content}</Text>
-        ) : (
+        </TouchableOpacity>
+      ) : (
+        <View style={[styles.bubble, styles.mentorBubble]}>
           <View style={styles.mentorContentBox}>
             {message.content ? (
               <Markdown style={markdownStyles} rules={markdownRules}>
-                {message.isStreaming ? closeUnfinishedMarkdown(message.content) : message.content}
+                {closeUnfinishedMarkdown(message.content)}
               </Markdown>
             ) : null}
 
@@ -154,7 +156,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               <View style={styles.streamingRow}>
                 <Animated.View style={[styles.pulsingDot, { opacity: cursorOpacity }]} />
                 <Text style={styles.streamingText}>
-                  {message.content ? '正在继续输出...' : 'AI老祖正在深入思考...'}
+                  {message.content ? '正在生成回答...' : 'AI老祖正在深入思考...'}
                 </Text>
               </View>
             )}
@@ -165,16 +167,31 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                 <View style={styles.statsRow}>
                   {message.stats ? (
                     <Text style={styles.statsText}>
-                      ⚡ {message.stats.tokensPerSecond} T/s · 首字{' '}
-                      {((message.stats.timeToFirstTokenMs || 0) / 1000).toFixed(2)}s ·{' '}
-                      {message.stats.totalTokens} tokens
+                      {isLikelyIncomplete ? '⚠️ 未完待续' : '✓ 回答完毕'} · ⚡{' '}
+                      {message.stats.tokensPerSecond} T/s · {message.stats.totalTokens} tokens
                     </Text>
                   ) : (
-                    <Text style={styles.statsText}>端侧大模型推理</Text>
+                    <Text style={styles.statsText}>
+                      {isLikelyIncomplete ? '⚠️ 未完待续' : '✓ 回答完毕'}
+                    </Text>
                   )}
                 </View>
 
                 <View style={styles.actionButtonsRow}>
+                  {/* 仅在非常罕见的残文截断场景下才提供接续按钮，杜绝状态混淆 */}
+                  {isLastAssistant && isLikelyIncomplete && onContinue && (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionBtnContinueHighlight]}
+                      onPress={() => onContinue(message.id)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionBtnContinueHighlightText]}>
+                        ⏩ 接续残文
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={handleCopy}
@@ -185,28 +202,6 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                       {copied ? '✓ 已复制' : '复制'}
                     </Text>
                   </TouchableOpacity>
-
-                  {isLastAssistant && onContinue && (
-                    <TouchableOpacity
-                      style={[
-                        styles.actionBtn,
-                        isLikelyIncomplete && styles.actionBtnContinueHighlight,
-                      ]}
-                      onPress={() => onContinue(message.id)}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Text
-                        style={[
-                          styles.actionBtnText,
-                          styles.actionBtnContinueText,
-                          isLikelyIncomplete && styles.actionBtnContinueHighlightText,
-                        ]}
-                      >
-                        ⏩ 继续输出
-                      </Text>
-                    </TouchableOpacity>
-                  )}
 
                   {isLastAssistant && onRegenerate && (
                     <TouchableOpacity
@@ -233,8 +228,8 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               </View>
             )}
           </View>
-        )}
-      </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };

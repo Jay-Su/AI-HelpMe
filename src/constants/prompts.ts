@@ -15,17 +15,9 @@ export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的技术导师【AI老�
  */
 export function formatChatML(
   messages: ChatMessage[],
-  systemPrompt: string = MENTOR_SYSTEM_PROMPT,
-  groundingChunk?: KnowledgeChunk | null
+  systemPrompt: string = MENTOR_SYSTEM_PROMPT
 ): string {
-  let prompt = `<|im_start|>system\n${systemPrompt.trim()}`;
-
-  // 权威知识库注入：若命中高置信度知识卡，将核心骨架注入系统提示词，彻底杜绝幻觉
-  if (groundingChunk) {
-    prompt += `\n\n【权威技术参考知识 - ${groundingChunk.title}】：\n${groundingChunk.skeletonTemplate.trim()}`;
-  }
-
-  prompt += `<|im_end|>\n`;
+  let prompt = `<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n`;
 
   // 严格保留最近 4 条完整消息（2 轮问答），保持完整语义，杜绝因残句产生的注意力畸变
   const recentMessages = messages.slice(-4);

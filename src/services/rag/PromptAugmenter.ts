@@ -21,7 +21,7 @@ export class PromptAugmenter {
     groundingChunk?: KnowledgeChunk | null,
     systemPrompt: string = MENTOR_SYSTEM_PROMPT
   ): string {
-    return formatChatML(messages, systemPrompt, groundingChunk);
+    return formatChatML(messages, systemPrompt);
   }
 }
 

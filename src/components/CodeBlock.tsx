@@ -14,7 +14,8 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   code,
   onExpandFullScreen,
 }) => {
-  const [softWrap, setSoftWrap] = useState<boolean>(false);
+  // 对齐 PocketPal：手机屏幕代码默认开启自动折行，无需费劲横滑，清晰直观；
+  const [softWrap, setSoftWrap] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
 
   const handleCopy = () => {
@@ -84,7 +85,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           </Text>
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.codeWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          style={styles.codeWrapper}
+        >
           <Text style={styles.codeText}>
             {code}
           </Text>

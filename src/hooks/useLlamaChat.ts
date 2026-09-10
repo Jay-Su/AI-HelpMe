@@ -1,17 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChatMessage } from '../types';
-import {
-  formatChatML,
-  formatContinuationChatML,
-  formatAdvancingChatML,
-  isResponseIncomplete,
-} from '../constants/prompts';
+import { formatChatML, formatContinuationChatML } from '../constants/prompts';
 import { SettingsService } from '../services/settings/SettingsService';
 import LlamaService from '../services/llama/LlamaService';
 import { sessionManager } from '../services/session/SessionManager';
-import { InvertedSearchEngine } from '../services/rag/InvertedSearchEngine';
-
-const searchEngine = new InvertedSearchEngine();
 
 /**
  * 自动净化会话历史消息：
@@ -180,12 +172,8 @@ export function useLlamaChat() {
       sessionManager.saveActiveSessionMessages([...updatedMessages, placeholderAssistantMessage]).catch(() => {});
 
       const settings = SettingsService.getSettings();
-      // 1. 端侧内存倒排索引秒级检索（<2ms），带置信度门禁，未命中自动安全静默降级为 null
-      const searchResult = searchEngine.search(trimmedInput);
-      const groundingChunk = searchResult?.chunk || null;
-
-      // 2. 纯净标准 ChatML，无任何多余 XML 槽位；若命中高置信度卡片则注入权威知识，彻底消灭幻觉
-      const prompt = formatChatML(updatedMessages, settings.systemPrompt, groundingChunk);
+      // 纯净标准 ChatML：100% 交由 J哥 微调好的大模型原生推理，质量由 System Prompt 与设置参数调优
+      const prompt = formatChatML(updatedMessages, settings.systemPrompt);
 
       try {
         await LlamaService.completion(
@@ -224,15 +212,6 @@ export function useLlamaChat() {
                           durationMs: stats.durationMs,
                           timeToFirstTokenMs: stats.timeToFirstTokenMs,
                         },
-                        ragMetadata: searchResult
-                          ? {
-                              hitChunkId: searchResult.chunk.chunkId,
-                              hitTitle: searchResult.chunk.title,
-                              domain: searchResult.chunk.domain,
-                              score: searchResult.score,
-                              matchedKeywords: Array.from(searchResult.matchedKeywords || []),
-                            }
-                          : undefined,
                       }
                     : msg
                 );
@@ -368,44 +347,23 @@ export function useLlamaChat() {
       setIsGenerating(true);
 
       const existingContent = targetMsg.content;
-      const isIncomplete = isResponseIncomplete(existingContent);
+      currentAssistantTextRef.current = existingContent;
 
       const settings = SettingsService.getSettings();
       // 上下文为当前消息之前的所有消息
       const contextMessages = messages.slice(0, targetMsgIndex);
 
-      let prompt = '';
-      if (isIncomplete) {
-        // 分支 A：残文/未闭合代码断点续写
-        currentAssistantTextRef.current = existingContent;
-        prompt = formatContinuationChatML(
-          contextMessages,
-          existingContent,
-          settings.systemPrompt
-        );
-        // 标记该消息重新进入流式状态
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, isStreaming: true } : m))
-        );
-      } else {
-        // 分支 B：已完整回答，用户需要进阶拓展与深度实战
-        const sectionHeader = '\n\n---\n\n### ⏩ 进阶展开与实战深化：\n\n';
-        currentAssistantTextRef.current = existingContent + sectionHeader;
-        prompt = formatAdvancingChatML(
-          contextMessages,
-          existingContent,
-          '请针对上述内容，为 J哥 进一步展开补充更深度的生产级实战细节、完整工程代码与关键避坑指南。',
-          settings.systemPrompt
-        );
-        // 立即向 UI 渲染分割线与小标题
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? { ...m, content: currentAssistantTextRef.current, isStreaming: true }
-              : m
-          )
-        );
-      }
+      // 纯净断点前缀续写：无缝接着上一 Token 继续向下生成
+      const prompt = formatContinuationChatML(
+        contextMessages,
+        existingContent,
+        settings.systemPrompt
+      );
+
+      // 标记该消息重新进入流式状态
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isStreaming: true } : m))
+      );
 
       try {
         await LlamaService.completion(
