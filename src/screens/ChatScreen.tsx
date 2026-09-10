@@ -12,11 +12,11 @@ import {
   Alert,
   Image,
   Keyboard,
+  ToastAndroid,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLlamaChat } from '../hooks/useLlamaChat';
 import { ChatMessageItem } from '../components/ChatMessageItem';
-import { QuickPrompts } from '../components/QuickPrompts';
 import { SessionDrawer } from '../components/SessionDrawer';
 import { ExportModal } from '../components/ExportModal';
 import { CodeViewerModal } from '../components/CodeViewerModal';
@@ -273,13 +273,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
     }, 60);
   };
 
-  const handleSelectQuickPrompt = (prefix: string) => {
-    setInputText((prev) => (prev ? `${prev}\n${prefix}` : prefix));
-    setTimeout(() => {
-      textInputRef.current?.focus();
-    }, 80);
-  };
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
@@ -299,7 +292,13 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
         {/* 中央模型指示药丸舱（对齐 PocketPal） */}
         <TouchableOpacity
           style={styles.headerModelPill}
-          onPress={() => navigation.navigate('ModelSettings')}
+          onPress={() => {
+            if (isGenerating) {
+              ToastAndroid.show('正在回答中，请等待完成或点击停止', ToastAndroid.SHORT);
+              return;
+            }
+            navigation.navigate('ModelSettings');
+          }}
           activeOpacity={0.8}
         >
           <View
@@ -327,6 +326,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={() => {
+              if (isGenerating) {
+                ToastAndroid.show('正在回答中，请等待完成或点击停止', ToastAndroid.SHORT);
+                return;
+              }
               if (messages.length === 0) return;
               Alert.alert('开启新对话', '确定要开启一段全新对话吗？', [
                 { text: '取消', style: 'cancel' },
@@ -337,25 +340,37 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.headerActionIcon}>＋</Text>
+            <Text style={[styles.headerActionIcon, isGenerating && { opacity: 0.4 }]}>＋</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setExportModalVisible(true)}
+            onPress={() => {
+              if (isGenerating) {
+                ToastAndroid.show('正在回答中，请等待完成或点击停止', ToastAndroid.SHORT);
+                return;
+              }
+              setExportModalVisible(true);
+            }}
             style={styles.headerIconBtn}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.headerActionText}>导出</Text>
+            <Text style={[styles.headerActionText, isGenerating && { opacity: 0.4 }]}>导出</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => navigation.navigate('ModelSettings')}
+            onPress={() => {
+              if (isGenerating) {
+                ToastAndroid.show('正在回答中，请等待完成或点击停止', ToastAndroid.SHORT);
+                return;
+              }
+              navigation.navigate('ModelSettings');
+            }}
             style={styles.headerIconBtn}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.headerActionIcon}>⚙</Text>
+            <Text style={[styles.headerActionIcon, isGenerating && { opacity: 0.4 }]}>⚙</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -424,10 +439,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
               <Text style={styles.emptySubtitle}>
                 纯离线端侧大模型推理 · 专为 J哥 护法答疑
               </Text>
-
-              <View style={styles.emptyQuickPrompts}>
-                <QuickPrompts onSelectPrompt={handleSelectQuickPrompt} />
-              </View>
             </View>
           }
         />

@@ -228,6 +228,12 @@ export const AI_CHUNKS: KnowledgeChunk[] = [
       'graphrag',
       '防幻觉',
       'rag架构',
+      'rag知识点',
+      'rag开发',
+      'ai rag',
+      'rag技术',
+      'rag核心',
+      'rag重点',
     ],
     apiContract:
       '必须系统梳理企业级高阶 RAG（Advanced RAG）全流程：切片分块、向量+BM25混合检索（Hybrid Search）、Rerank 重排、GraphRAG 全局推理，以及防幻觉过滤机制。',

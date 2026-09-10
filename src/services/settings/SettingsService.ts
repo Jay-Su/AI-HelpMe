@@ -14,8 +14,8 @@ export interface AppSettings {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  threads: 6,
-  contextSize: 4096,
+  threads: 4,
+  contextSize: 2048,
   gpuLayers: 0,
   temperature: 0.7,
   topP: 0.9,
@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt: MENTOR_SYSTEM_PROMPT,
 };
 
-const PROMPT_VERSION = 'v2_detailed';
+const PROMPT_VERSION = 'v5_pocketpal_aligned';
 
 class SettingsServiceClass {
   private settings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -35,36 +35,40 @@ class SettingsServiceClass {
 
     try {
       if (StorageBridge?.getString) {
-        const t = await StorageBridge.getString('setting_threads', '');
-        if (t) this.settings.threads = parseInt(t, 10);
-        else this.settings.threads = DEFAULT_SETTINGS.threads;
-
-        const ctx = await StorageBridge.getString('setting_context_size', '');
-        if (ctx) this.settings.contextSize = parseInt(ctx, 10);
-        else this.settings.contextSize = DEFAULT_SETTINGS.contextSize;
-
-        const gpu = await StorageBridge.getString('setting_gpu_layers', '');
-        if (gpu) this.settings.gpuLayers = parseInt(gpu, 10);
-
-        const temp = await StorageBridge.getString('setting_temperature', '');
-        if (temp) this.settings.temperature = parseFloat(temp);
-
-        const topP = await StorageBridge.getString('setting_top_p', '');
-        if (topP) this.settings.topP = parseFloat(topP);
-
-        const maxTok = await StorageBridge.getString('setting_max_tokens', '');
-        if (maxTok) this.settings.maxTokens = parseInt(maxTok, 10);
-        else this.settings.maxTokens = DEFAULT_SETTINGS.maxTokens;
-
         const pVer = await StorageBridge.getString('setting_prompt_version', '');
         if (pVer === PROMPT_VERSION) {
+          const t = await StorageBridge.getString('setting_threads', '');
+          if (t) this.settings.threads = parseInt(t, 10);
+          else this.settings.threads = DEFAULT_SETTINGS.threads;
+
+          const ctx = await StorageBridge.getString('setting_context_size', '');
+          if (ctx) this.settings.contextSize = parseInt(ctx, 10);
+          else this.settings.contextSize = DEFAULT_SETTINGS.contextSize;
+
+          const gpu = await StorageBridge.getString('setting_gpu_layers', '');
+          if (gpu) this.settings.gpuLayers = parseInt(gpu, 10);
+
+          const temp = await StorageBridge.getString('setting_temperature', '');
+          if (temp) this.settings.temperature = parseFloat(temp);
+
+          const topP = await StorageBridge.getString('setting_top_p', '');
+          if (topP) this.settings.topP = parseFloat(topP);
+
+          const maxTok = await StorageBridge.getString('setting_max_tokens', '');
+          if (maxTok) this.settings.maxTokens = parseInt(maxTok, 10);
+          else this.settings.maxTokens = DEFAULT_SETTINGS.maxTokens;
+
           const prompt = await StorageBridge.getString('setting_system_prompt', '');
           if (prompt) this.settings.systemPrompt = prompt;
         } else {
-          // 升级提示词至最新版本，确保深度概念回答生效
+          // 彻底对齐 PocketPal：4大核极速无锁调度、2048轻量窗口、纯净提示词
           this.settings.systemPrompt = MENTOR_SYSTEM_PROMPT;
+          this.settings.threads = 4;
+          this.settings.contextSize = 2048;
           StorageBridge?.saveString?.('setting_prompt_version', PROMPT_VERSION);
           StorageBridge?.saveString?.('setting_system_prompt', MENTOR_SYSTEM_PROMPT);
+          StorageBridge?.saveString?.('setting_threads', '4');
+          StorageBridge?.saveString?.('setting_context_size', '2048');
         }
       }
     } catch (e) {

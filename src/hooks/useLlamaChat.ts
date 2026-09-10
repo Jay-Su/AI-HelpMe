@@ -4,6 +4,9 @@ import { formatChatML } from '../constants/prompts';
 import { SettingsService } from '../services/settings/SettingsService';
 import LlamaService from '../services/llama/LlamaService';
 import { sessionManager } from '../services/session/SessionManager';
+import { InvertedSearchEngine } from '../services/rag/InvertedSearchEngine';
+
+const searchEngine = new InvertedSearchEngine();
 
 /**
  * 自动净化会话历史消息：
@@ -12,6 +15,9 @@ import { sessionManager } from '../services/session/SessionManager';
 const sanitizeMessages = (rawMessages: ChatMessage[]): ChatMessage[] => {
   return (rawMessages || [])
     .filter((msg) => {
+      if (msg.role === 'assistant' && !msg.content?.trim() && !msg.isStreaming) {
+        return false;
+      }
       if (
         msg.role === 'assistant' &&
         (msg.content === '[上次推演已中断]' ||
@@ -30,6 +36,12 @@ const sanitizeMessages = (rawMessages: ChatMessage[]): ChatMessage[] => {
         };
       }
       return msg;
+    })
+    .filter((msg) => {
+      if (msg.role === 'assistant' && !msg.content?.trim()) {
+        return false;
+      }
+      return true;
     });
 };
 
@@ -127,8 +139,12 @@ export function useLlamaChat() {
       sessionManager.saveActiveSessionMessages([...updatedMessages, placeholderAssistantMessage]).catch(() => {});
 
       const settings = SettingsService.getSettings();
-      // 纯净标准 ChatML，无任何多余 XML 槽位，秒级响应
-      const prompt = formatChatML(updatedMessages, settings.systemPrompt);
+      // 1. 端侧内存倒排索引秒级检索（<2ms），带置信度门禁，未命中自动安全静默降级为 null
+      const searchResult = searchEngine.search(trimmedInput);
+      const groundingChunk = searchResult?.chunk || null;
+
+      // 2. 纯净标准 ChatML，无任何多余 XML 槽位；若命中高置信度卡片则注入权威知识，彻底消灭幻觉
+      const prompt = formatChatML(updatedMessages, settings.systemPrompt, groundingChunk);
 
       try {
         await LlamaService.completion(
@@ -159,6 +175,12 @@ export function useLlamaChat() {
               activeGenerationIdRef.current = null;
 
               setMessages((prevMessages) => {
+                if (!currentAssistantTextRef.current.trim()) {
+                  const clean = prevMessages.filter((msg) => msg.id !== assistantMessageId);
+                  sessionManager.saveActiveSessionMessages(clean).catch(() => {});
+                  return clean;
+                }
+
                 const finalMessages = prevMessages.map((msg) =>
                   msg.id === assistantMessageId
                     ? {
@@ -170,6 +192,15 @@ export function useLlamaChat() {
                           durationMs: stats.durationMs,
                           timeToFirstTokenMs: stats.timeToFirstTokenMs,
                         },
+                        ragMetadata: searchResult
+                          ? {
+                              hitChunkId: searchResult.chunk.chunkId,
+                              hitTitle: searchResult.chunk.title,
+                              domain: searchResult.chunk.domain,
+                              score: searchResult.score,
+                              matchedKeywords: Array.from(searchResult.matchedKeywords || []),
+                            }
+                          : undefined,
                       }
                     : msg
                 );

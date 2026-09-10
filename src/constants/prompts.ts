@@ -1,40 +1,42 @@
 import { ChatMessage, QuickPrompt } from '../types';
+import { KnowledgeChunk } from '../knowledge';
 
 /**
  * AI老祖系统提示词（专为 J哥 护法）
- * 明确要求概念问题必须深入详尽、结构完整，代码问题必须规范且带核心原理解释
+ * 要求实事求是、详尽专业、结构清晰，杜绝胡编乱造
  */
-export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的全栈与AI技术导师【AI老祖】，专为【J哥】答疑解惑。
-每次回答请亲切尊称提问者为“J哥”。
-
-请严格遵循以下回答准则：
-1. 【技术概念与原理解答（严禁过于简短或敷衍）】：
-   当 J哥 提问技术概念、底层原理、核心机制或架构方案时（例如 RAG、微调、端侧大模型、Transformer、高并发等），绝对不能寥寥几句话简单带过！必须条理清晰、层次分明、深入透彻，该有的核心内容必须全部讲全讲透：
-   - 核心定义与本质（通俗准确地讲透它是什么、为了解决什么痛点）；
-   - 底层运行机制与工作流程（详细拆解核心步骤、数据流向与内部逻辑）；
-   - 核心组成模块与关键技术点；
-   - 核心优势与潜在局限/踩坑警诫；
-   - 工业级典型应用场景或落地方案。
-   确保内容详尽丰富、干货满满，让 J哥 真正能够掌握全貌与底层逻辑。
-
-2. 【代码与实操问题解答（规范代码 + 核心解析）】：
-   当 J哥 提问代码实现或排查调试时，给出生产级规范、严谨健壮的完整代码。代码前后必须附带关键原理与核心逻辑的解释说明，做到重点突出、言之有物，绝不只甩生硬代码。`;
+export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的技术导师【AI老祖】。请每次回复开头亲切称呼提问者为“J哥”，为【J哥】提供深入透彻、条理分明、详尽清晰的专业技术解答（技术概念问题必须阐明核心定义、关键技术模块与完整流程链路；代码实操问题给出规范实现与原理解析）。严禁敷衍与胡编乱造。`;
 
 /**
- * Qwen2.5-Coder 纯净标准 ChatML 格式转换器
- * 平衡轮次（最近 6 条消息），保持极低 Prefill 耗时（0.5~1秒极速首字输出）
+ * Qwen2.5 纯净标准 ChatML 格式转换器
+ * 1. 保留最近 4 条完整上下文（2 轮对话），绝不机械硬截断，确保模型语义完整连贯；
+ * 2. 命中知识卡时自然注入权威骨架，未命中时纯净自然放行；
+ * 3. 极速 Prefill 响应（对齐 PocketPal 体验）。
  */
-export function formatChatML(messages: ChatMessage[], systemPrompt: string = MENTOR_SYSTEM_PROMPT): string {
-  let prompt = `<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n`;
+export function formatChatML(
+  messages: ChatMessage[],
+  systemPrompt: string = MENTOR_SYSTEM_PROMPT,
+  groundingChunk?: KnowledgeChunk | null
+): string {
+  let prompt = `<|im_start|>system\n${systemPrompt.trim()}`;
 
-  // 截取最近 6 条消息（3 轮对话），兼顾上下文关联与毫秒级 Prefill 极速
-  const recentMessages = messages.slice(-6);
+  // 权威知识库注入：若命中高置信度知识卡，将核心骨架注入系统提示词，彻底杜绝幻觉
+  if (groundingChunk) {
+    prompt += `\n\n【权威技术参考知识 - ${groundingChunk.title}】：\n${groundingChunk.skeletonTemplate.trim()}`;
+  }
+
+  prompt += `<|im_end|>\n`;
+
+  // 严格保留最近 4 条完整消息（2 轮问答），保持完整语义，杜绝因残句产生的注意力畸变
+  const recentMessages = messages.slice(-4);
 
   for (const msg of recentMessages) {
+    const trimmed = msg.content ? msg.content.trim() : '';
+    if (!trimmed) continue;
     if (msg.role === 'user') {
-      prompt += `<|im_start|>user\n${msg.content.trim()}<|im_end|>\n`;
-    } else if (msg.role === 'assistant' && msg.content.trim()) {
-      prompt += `<|im_start|>assistant\n${msg.content.trim()}<|im_end|>\n`;
+      prompt += `<|im_start|>user\n${trimmed}<|im_end|>\n`;
+    } else if (msg.role === 'assistant') {
+      prompt += `<|im_start|>assistant\n${trimmed}<|im_end|>\n`;
     }
   }
 

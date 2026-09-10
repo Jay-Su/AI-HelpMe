@@ -159,20 +159,33 @@ export class InvertedSearchEngine {
         const record = scores.get(chunkId)!;
         record.matchedKeywords.add(token);
 
-        // 打分机制：基础词频 + 关键词与特性硬加权
+        // 打分机制：基础词频 + 关键词与特性硬加权 + 专有技术词强加权
         let weight = 1.0;
 
-        // 若直接命中了预设 keywords 或 mustHaveFeatures，给予 3 倍权重
+        // 通用口语停用词降权
+        const GENERIC_QUERY_WORDS = new Set([
+          '关于', '开发', '知识', '知识点', '有哪些', '需要', '掌握',
+          '的', '了', '和', '与', '怎么', '如何', '什么', '请问', '讲讲', '介绍'
+        ]);
+
+        if (GENERIC_QUERY_WORDS.has(token)) {
+          weight = 0.25;
+        } else if (token.length >= 2 && /^[a-zA-Z0-9_.-]+$/.test(token)) {
+          // 英文缩写与代码标识符强加权（如 rag, redis, k8s, docker, debounce, vue, peft）
+          weight = 4.5;
+        }
+
+        // 若直接命中了预设 keywords 或 mustHaveFeatures，给予高倍权重
         const lowerKeywords = chunk.keywords.map((k) => k.toLowerCase());
         const lowerFeatures = chunk.mustHaveFeatures.map((f) => f.toLowerCase());
 
         if (lowerKeywords.includes(token) || lowerFeatures.includes(token)) {
-          weight = 3.5;
+          weight *= 3.5;
         }
 
         // 标题强相关加权
         if (chunk.title.toLowerCase().includes(token)) {
-          weight += 2.0;
+          weight += 3.0;
         }
 
         record.score += weight;

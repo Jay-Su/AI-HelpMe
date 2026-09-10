@@ -10,6 +10,7 @@ const { assetExts } = defaultConfig.resolver;
 const config = {
   resolver: {
     assetExts: [...assetExts, 'gguf'],
+    sourceExts: ['tsx', 'ts', 'jsx', 'js', 'json'],
   },
 };
 

@@ -182,11 +182,12 @@ class LlamaService {
             prompt,
             temperature: options.temperature ?? 0.7,
             n_predict: options.maxTokens ?? 1024,
+            top_p: options.topP ?? 0.9,
+            top_k: 40,
+            penalty_repeat: 1.15,
+            penalty_last_n: 64,
             stop: STOP_TOKENS,
           };
-          if (options.topP !== undefined) {
-            completionParams.top_p = options.topP;
-          }
 
           result = await this.context.completion(
             completionParams,
