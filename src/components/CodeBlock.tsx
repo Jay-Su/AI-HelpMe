@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { THEME } from '../constants/theme';
@@ -76,16 +76,16 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
         </View>
       </View>
 
-      {/* 代码正文视区 */}
+      {/* 代码正文视区（对齐 PocketPal：禁用原生 selectable 避免 Android 排版死锁，长按/右上角复制） */}
       {softWrap ? (
         <View style={styles.codeWrapper}>
-          <Text style={styles.codeTextSoftWrap} selectable>
+          <Text style={styles.codeTextSoftWrap}>
             {code}
           </Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.codeWrapper}>
-          <Text style={styles.codeText} selectable>
+          <Text style={styles.codeText}>
             {code}
           </Text>
         </ScrollView>

@@ -14,6 +14,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { ChatMessage } from '../types';
 import { CodeBlock } from './CodeBlock';
 import { THEME } from '../constants/theme';
+import { isResponseIncomplete } from '../constants/prompts';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -23,6 +24,20 @@ interface ChatMessageItemProps {
   onDelete?: (id: string) => void;
   isLastAssistant?: boolean;
 }
+
+/**
+ * 闭合未完成的 Markdown 代码块
+ * 当模型在流式输出中生成 ``` 代码块但尚未输出结尾闭合 ``` 时，
+ * 动态补全闭合标记，防止 react-native-markdown-display 产生未闭合的 AST 节点或引发 Android 高度塌陷重叠
+ */
+const closeUnfinishedMarkdown = (text: string): string => {
+  if (!text) return '';
+  const fenceMatches = text.match(/```/g);
+  if (fenceMatches && fenceMatches.length % 2 !== 0) {
+    return text + '\n```';
+  }
+  return text;
+};
 
 const createMarkdownRules = (
   onExpandFullScreen?: (code: string, language: string) => void
@@ -94,8 +109,8 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   const isLikelyIncomplete =
     !isUser &&
     !message.isStreaming &&
-    message.content.length > 20 &&
-    /[;；,，:：、\-]\s*$/.test(message.content.trim());
+    message.content.length > 0 &&
+    isResponseIncomplete(message.content);
 
   return (
     <View style={[styles.container, isUser ? styles.userContainer : styles.mentorContainer]}>
@@ -130,7 +145,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
           <View style={styles.mentorContentBox}>
             {message.content ? (
               <Markdown style={markdownStyles} rules={markdownRules}>
-                {message.content}
+                {message.isStreaming ? closeUnfinishedMarkdown(message.content) : message.content}
               </Markdown>
             ) : null}
 
@@ -309,7 +324,9 @@ const styles = StyleSheet.create({
   streamingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   pulsingDot: {
     width: 8,
@@ -447,6 +464,14 @@ const markdownStyles = {
   ordered_list_icon: {
     color: THEME.colors.primaryLight,
     marginRight: 8,
+  },
+  bullet_list_content: {
+    flex: 1,
+    flexDirection: 'column' as const,
+  },
+  ordered_list_content: {
+    flex: 1,
+    flexDirection: 'column' as const,
   },
   blockquote: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',

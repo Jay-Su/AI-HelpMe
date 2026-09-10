@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChatMessage } from '../types';
-import { formatChatML, formatContinuationChatML } from '../constants/prompts';
+import {
+  formatChatML,
+  formatContinuationChatML,
+  formatAdvancingChatML,
+  isResponseIncomplete,
+} from '../constants/prompts';
 import { SettingsService } from '../services/settings/SettingsService';
 import LlamaService from '../services/llama/LlamaService';
 import { sessionManager } from '../services/session/SessionManager';
@@ -55,6 +60,42 @@ export function useLlamaChat() {
   const activeGenerationIdRef = useRef<string | null>(null);
   const currentAssistantTextRef = useRef<string>('');
   const currentSessionIdRef = useRef<string>('');
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFlushTimeRef = useRef<number>(0);
+
+  const flushThrottledText = useCallback((messageId: string) => {
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
+    }
+    const currentContent = currentAssistantTextRef.current;
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) =>
+        msg.id === messageId ? { ...msg, content: currentContent } : msg
+      )
+    );
+    lastFlushTimeRef.current = Date.now();
+  }, []);
+
+  const queueThrottledToken = useCallback(
+    (messageId: string, generationId: string, newToken: string) => {
+      if (activeGenerationIdRef.current !== generationId) return;
+      currentAssistantTextRef.current += newToken;
+
+      const now = Date.now();
+      const elapsed = now - lastFlushTimeRef.current;
+      // 45ms 节流窗口：保证约 22 FPS 的极度顺滑视觉体验，同时减负 60% React 树重新渲染
+      if (elapsed >= 45) {
+        flushThrottledText(messageId);
+      } else if (!throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          flushThrottledText(messageId);
+        }, 45 - elapsed);
+      }
+    },
+    [flushThrottledText]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -156,23 +197,13 @@ export function useLlamaChat() {
           },
           {
             onToken: (newToken: string) => {
-              if (activeGenerationIdRef.current !== generationId) return;
-
-              currentAssistantTextRef.current += newToken;
-              const currentContent = currentAssistantTextRef.current;
-
-              setMessages((prevMessages) =>
-                prevMessages.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, content: currentContent }
-                    : msg
-                )
-              );
+              queueThrottledToken(assistantMessageId, generationId, newToken);
             },
 
             onComplete: (stats) => {
               if (activeGenerationIdRef.current !== generationId) return;
               activeGenerationIdRef.current = null;
+              flushThrottledText(assistantMessageId);
 
               setMessages((prevMessages) => {
                 if (!currentAssistantTextRef.current.trim()) {
@@ -185,6 +216,7 @@ export function useLlamaChat() {
                   msg.id === assistantMessageId
                     ? {
                         ...msg,
+                        content: currentAssistantTextRef.current,
                         isStreaming: false,
                         stats: {
                           totalTokens: stats.totalTokens,
@@ -214,6 +246,7 @@ export function useLlamaChat() {
             onError: (err: Error) => {
               if (activeGenerationIdRef.current !== generationId) return;
               activeGenerationIdRef.current = null;
+              flushThrottledText(assistantMessageId);
 
               setError(err.message);
               isGeneratingRef.current = false;
@@ -309,7 +342,9 @@ export function useLlamaChat() {
   }, [messages, isGenerating, sendMessage]);
 
   /**
-   * 断点续写（继续输出）：紧接上文未闭合的内容无缝向下生成
+   * 断点续写 / 进阶拓展（继续输出）
+   * 1. 若上文被截断（句中未完结、未闭合代码块等）：采用前缀无缝断点续写；
+   * 2. 若上文已完整回答：采用进阶深度展开推进模式，并自动追加优雅小标题与分割线。
    */
   const continueGenerating = useCallback(
     async (messageId: string) => {
@@ -333,22 +368,44 @@ export function useLlamaChat() {
       setIsGenerating(true);
 
       const existingContent = targetMsg.content;
-      currentAssistantTextRef.current = existingContent;
-
-      // 标记该消息重新进入流式状态
-      setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, isStreaming: true } : m))
-      );
+      const isIncomplete = isResponseIncomplete(existingContent);
 
       const settings = SettingsService.getSettings();
       // 上下文为当前消息之前的所有消息
       const contextMessages = messages.slice(0, targetMsgIndex);
 
-      const prompt = formatContinuationChatML(
-        contextMessages,
-        existingContent,
-        settings.systemPrompt
-      );
+      let prompt = '';
+      if (isIncomplete) {
+        // 分支 A：残文/未闭合代码断点续写
+        currentAssistantTextRef.current = existingContent;
+        prompt = formatContinuationChatML(
+          contextMessages,
+          existingContent,
+          settings.systemPrompt
+        );
+        // 标记该消息重新进入流式状态
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, isStreaming: true } : m))
+        );
+      } else {
+        // 分支 B：已完整回答，用户需要进阶拓展与深度实战
+        const sectionHeader = '\n\n---\n\n### ⏩ 进阶展开与实战深化：\n\n';
+        currentAssistantTextRef.current = existingContent + sectionHeader;
+        prompt = formatAdvancingChatML(
+          contextMessages,
+          existingContent,
+          '请针对上述内容，为 J哥 进一步展开补充更深度的生产级实战细节、完整工程代码与关键避坑指南。',
+          settings.systemPrompt
+        );
+        // 立即向 UI 渲染分割线与小标题
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? { ...m, content: currentAssistantTextRef.current, isStreaming: true }
+              : m
+          )
+        );
+      }
 
       try {
         await LlamaService.completion(
@@ -360,25 +417,19 @@ export function useLlamaChat() {
           },
           {
             onToken: (newToken: string) => {
-              if (activeGenerationIdRef.current !== generationId) return;
-              currentAssistantTextRef.current += newToken;
-              const currentContent = currentAssistantTextRef.current;
-
-              setMessages((prevMessages) =>
-                prevMessages.map((msg) =>
-                  msg.id === messageId ? { ...msg, content: currentContent } : msg
-                )
-              );
+              queueThrottledToken(messageId, generationId, newToken);
             },
             onComplete: (stats) => {
               if (activeGenerationIdRef.current !== generationId) return;
               activeGenerationIdRef.current = null;
+              flushThrottledText(messageId);
 
               setMessages((prevMessages) => {
                 const finalMessages = prevMessages.map((msg) =>
                   msg.id === messageId
                     ? {
                         ...msg,
+                        content: currentAssistantTextRef.current,
                         isStreaming: false,
                         stats: {
                           totalTokens: (msg.stats?.totalTokens || 0) + stats.totalTokens,
@@ -398,12 +449,15 @@ export function useLlamaChat() {
             onError: (err: Error) => {
               if (activeGenerationIdRef.current !== generationId) return;
               activeGenerationIdRef.current = null;
+              flushThrottledText(messageId);
               setError(err.message);
               isGeneratingRef.current = false;
               setIsGenerating(false);
               setMessages((prevMessages) => {
                 const finalMessages = prevMessages.map((msg) =>
-                  msg.id === messageId ? { ...msg, isStreaming: false } : msg
+                  msg.id === messageId
+                    ? { ...msg, content: currentAssistantTextRef.current, isStreaming: false }
+                    : msg
                 );
                 sessionManager.saveActiveSessionMessages(finalMessages).catch(() => {});
                 return finalMessages;
@@ -414,12 +468,15 @@ export function useLlamaChat() {
       } catch (err: any) {
         if (activeGenerationIdRef.current === generationId) {
           activeGenerationIdRef.current = null;
+          flushThrottledText(messageId);
           setError(err?.message || '续写推理执行异常');
           isGeneratingRef.current = false;
           setIsGenerating(false);
           setMessages((prevMessages) => {
             const finalMessages = prevMessages.map((msg) =>
-              msg.id === messageId ? { ...msg, isStreaming: false } : msg
+              msg.id === messageId
+                ? { ...msg, content: currentAssistantTextRef.current, isStreaming: false }
+                : msg
             );
             sessionManager.saveActiveSessionMessages(finalMessages).catch(() => {});
             return finalMessages;
@@ -427,7 +484,7 @@ export function useLlamaChat() {
         }
       }
     },
-    [messages, isGenerating]
+    [messages, isGenerating, queueThrottledToken, flushThrottledText]
   );
 
   /**
@@ -443,6 +500,10 @@ export function useLlamaChat() {
   }, [isGenerating]);
 
   const stopGenerating = useCallback(async () => {
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
+    }
     activeGenerationIdRef.current = null;
     isGeneratingRef.current = false;
     setIsGenerating(false);

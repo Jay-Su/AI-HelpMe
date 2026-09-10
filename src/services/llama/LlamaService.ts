@@ -168,10 +168,33 @@ class LlamaService {
     this.isGenerating = true;
     const startTime = Date.now();
     let firstTokenTime: number | null = null;
+    let lastTokenTime = startTime;
     let tokenCount = 0;
     let fullGeneratedText = '';
+    let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
     try {
+      // 启动流式心跳看门狗：防止底层原生 C++ 发生挂起/死锁导致前端界面无限假死
+      watchdogTimer = setInterval(async () => {
+        if (!this.isGenerating) {
+          if (watchdogTimer) clearInterval(watchdogTimer);
+          return;
+        }
+        const now = Date.now();
+        const idleDuration = now - lastTokenTime;
+        const ttftTimeout = firstTokenTime === null && now - startTime > 20000;
+        const tokenStallTimeout = firstTokenTime !== null && idleDuration > 12000;
+
+        if (ttftTimeout || tokenStallTimeout) {
+          console.warn(
+            `[LlamaService Watchdog] 引擎停滞检测触发（${idleDuration}ms 无新 Token），自动执行优雅熔断`
+          );
+          if (watchdogTimer) clearInterval(watchdogTimer);
+          watchdogTimer = null;
+          await this.stop();
+        }
+      }, 1000);
+
       let result: any = null;
       let retries = 0;
       const maxRetries = 2;
@@ -194,16 +217,21 @@ class LlamaService {
             (data: { token: string }) => {
               if (!this.isGenerating) return;
 
-              const now = Date.now();
-              if (firstTokenTime === null) {
-                firstTokenTime = now;
-                const ttft = firstTokenTime - startTime;
-                callbacks.onFirstToken?.(ttft);
-              }
+              try {
+                const now = Date.now();
+                lastTokenTime = now;
+                if (firstTokenTime === null) {
+                  firstTokenTime = now;
+                  const ttft = firstTokenTime - startTime;
+                  callbacks.onFirstToken?.(ttft);
+                }
 
-              tokenCount++;
-              fullGeneratedText += data.token;
-              callbacks.onToken?.(data.token);
+                tokenCount++;
+                fullGeneratedText += data.token;
+                callbacks.onToken?.(data.token);
+              } catch (cbErr) {
+                console.warn('[LlamaService] onToken callback exception:', cbErr);
+              }
             }
           );
           break;
@@ -241,9 +269,33 @@ class LlamaService {
 
       return result?.text || fullGeneratedText;
     } catch (err: any) {
+      if (tokenCount > 0) {
+        // 若已产生部分有效 Token 但由于中断/看门狗中止，优雅保留已生成内容
+        console.warn(`[LlamaService] 推理被中断，已优雅收拢保存已生成的 ${tokenCount} 个 Token`);
+        const endTime = Date.now();
+        const totalDuration = endTime - startTime;
+        const ttft = (firstTokenTime ?? endTime) - startTime;
+        const generationDuration = endTime - (firstTokenTime ?? startTime);
+        const tokensPerSecond =
+          generationDuration > 0
+            ? Number(((tokenCount / generationDuration) * 1000).toFixed(2))
+            : 0;
+
+        callbacks.onComplete?.({
+          totalTokens: tokenCount,
+          durationMs: totalDuration,
+          tokensPerSecond,
+          timeToFirstTokenMs: ttft,
+        });
+        return fullGeneratedText;
+      }
       callbacks.onError?.(err);
       throw err;
     } finally {
+      if (watchdogTimer) {
+        clearInterval(watchdogTimer);
+        watchdogTimer = null;
+      }
       this.isGenerating = false;
     }
   }
