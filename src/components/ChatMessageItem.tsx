@@ -19,6 +19,7 @@ interface ChatMessageItemProps {
   message: ChatMessage;
   onExpandFullScreen?: (code: string, language: string) => void;
   onRegenerate?: () => void;
+  onContinue?: (id: string) => void;
   onDelete?: (id: string) => void;
   isLastAssistant?: boolean;
 }
@@ -44,6 +45,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   message,
   onExpandFullScreen,
   onRegenerate,
+  onContinue,
   onDelete,
   isLastAssistant = false,
 }) => {
@@ -88,6 +90,12 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   };
 
   const markdownRules = createMarkdownRules(onExpandFullScreen);
+
+  const isLikelyIncomplete =
+    !isUser &&
+    !message.isStreaming &&
+    message.content.length > 20 &&
+    /[;；,，:：、\-]\s*$/.test(message.content.trim());
 
   return (
     <View style={[styles.container, isUser ? styles.userContainer : styles.mentorContainer]}>
@@ -162,6 +170,28 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                       {copied ? '✓ 已复制' : '复制'}
                     </Text>
                   </TouchableOpacity>
+
+                  {isLastAssistant && onContinue && (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtn,
+                        isLikelyIncomplete && styles.actionBtnContinueHighlight,
+                      ]}
+                      onPress={() => onContinue(message.id)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text
+                        style={[
+                          styles.actionBtnText,
+                          styles.actionBtnContinueText,
+                          isLikelyIncomplete && styles.actionBtnContinueHighlightText,
+                        ]}
+                      >
+                        ⏩ 继续输出
+                      </Text>
+                    </TouchableOpacity>
+                  )}
 
                   {isLastAssistant && onRegenerate && (
                     <TouchableOpacity
@@ -327,6 +357,20 @@ const styles = StyleSheet.create({
   },
   actionBtnTextActive: {
     color: THEME.colors.accentGreen,
+  },
+  actionBtnContinueHighlight: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  actionBtnContinueText: {
+    color: '#38BDF8',
+    fontWeight: '600',
+  },
+  actionBtnContinueHighlightText: {
+    color: '#7DD3FC',
+    fontWeight: '700',
   },
 });
 

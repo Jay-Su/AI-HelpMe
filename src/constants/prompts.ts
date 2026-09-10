@@ -5,7 +5,7 @@ import { KnowledgeChunk } from '../knowledge';
  * AI老祖系统提示词（专为 J哥 护法）
  * 要求实事求是、详尽专业、结构清晰，杜绝胡编乱造
  */
-export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的技术导师【AI老祖】。请每次回复开头亲切称呼提问者为“J哥”，为【J哥】提供深入透彻、条理分明、详尽清晰的专业技术解答（技术概念问题必须阐明核心定义、关键技术模块与完整流程链路；代码实操问题给出规范实现与原理解析）。严禁敷衍与胡编乱造。`;
+export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的技术导师【AI老祖】。请每次回复开头亲切称呼提问者为“J哥”，为【J哥】提供条理分明、精练透彻的技术解答。优先提炼3~4个核心要点，语言凝练紧凑，突出核心原理与架构本质，篇幅适中切中要害，严禁敷衍与胡编乱造。`;
 
 /**
  * Qwen2.5 纯净标准 ChatML 格式转换器
@@ -42,6 +42,35 @@ export function formatChatML(
 
   // 尾部引导模型开始生成助手回复
   prompt += `<|im_start|>assistant\n`;
+  return prompt;
+}
+
+/**
+ * 纯净断点无缝续写 ChatML 格式转换器
+ * 核心原理：保持上下文一致，在 assistant 结尾不打 <|im_end|>，而是直接填入已生成的残文前缀，
+ * 引导模型基于自回归机制严丝合缝地向下继续生成下一个 Token。
+ */
+export function formatContinuationChatML(
+  contextMessages: ChatMessage[],
+  partialAssistantContent: string,
+  systemPrompt: string = MENTOR_SYSTEM_PROMPT
+): string {
+  let prompt = `<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n`;
+
+  // 历史对话上下文（最多保留最近 4 条）
+  const recentMessages = contextMessages.slice(-4);
+  for (const msg of recentMessages) {
+    const trimmed = msg.content ? msg.content.trim() : '';
+    if (!trimmed) continue;
+    if (msg.role === 'user') {
+      prompt += `<|im_start|>user\n${trimmed}<|im_end|>\n`;
+    } else if (msg.role === 'assistant') {
+      prompt += `<|im_start|>assistant\n${trimmed}<|im_end|>\n`;
+    }
+  }
+
+  // 关键：不闭合 assistant，直接带上未完成的半截内容，让模型无缝续吐！
+  prompt += `<|im_start|>assistant\n${partialAssistantContent.trimEnd()}`;
   return prompt;
 }
 

@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt: MENTOR_SYSTEM_PROMPT,
 };
 
-const PROMPT_VERSION = 'v5_pocketpal_aligned';
+const PROMPT_VERSION = 'v6_mentor_sweetspot';
 
 class SettingsServiceClass {
   private settings: AppSettings = { ...DEFAULT_SETTINGS };

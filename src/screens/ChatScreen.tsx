@@ -70,6 +70,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
     isGenerating,
     error,
     sendMessage,
+    continueGenerating,
     regenerateLastMessage,
     deleteMessage,
     stopGenerating,
@@ -402,6 +403,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
               message={item}
               isLastAssistant={index === messages.length - 1 && item.role === 'assistant'}
               onRegenerate={regenerateLastMessage}
+              onContinue={continueGenerating}
               onDelete={deleteMessage}
               onExpandFullScreen={(code, lang) =>
                 setCodeModalData({ visible: true, code, language: lang })
@@ -411,7 +413,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation }) => {
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
             if (isAtBottom && !isUserScrollingRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: true });
+              flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
           onScroll={handleScroll}

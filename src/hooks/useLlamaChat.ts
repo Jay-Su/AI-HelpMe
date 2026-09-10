@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChatMessage } from '../types';
-import { formatChatML } from '../constants/prompts';
+import { formatChatML, formatContinuationChatML } from '../constants/prompts';
 import { SettingsService } from '../services/settings/SettingsService';
 import LlamaService from '../services/llama/LlamaService';
 import { sessionManager } from '../services/session/SessionManager';
@@ -309,6 +309,128 @@ export function useLlamaChat() {
   }, [messages, isGenerating, sendMessage]);
 
   /**
+   * 断点续写（继续输出）：紧接上文未闭合的内容无缝向下生成
+   */
+  const continueGenerating = useCallback(
+    async (messageId: string) => {
+      if (isGenerating || isGeneratingRef.current) return;
+
+      const targetMsgIndex = messages.findIndex((m) => m.id === messageId);
+      if (targetMsgIndex === -1) return;
+      const targetMsg = messages[targetMsgIndex];
+      if (targetMsg.role !== 'assistant' || !targetMsg.content) return;
+
+      const modelStatus = LlamaService.getStatus();
+      if (!modelStatus.isLoaded) {
+        setError('未检测到已挂载的模型，请前往设置加载模型。');
+        return;
+      }
+
+      const generationId = `${Date.now()}_${Math.random()}`;
+      activeGenerationIdRef.current = generationId;
+      setError(null);
+      isGeneratingRef.current = true;
+      setIsGenerating(true);
+
+      const existingContent = targetMsg.content;
+      currentAssistantTextRef.current = existingContent;
+
+      // 标记该消息重新进入流式状态
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isStreaming: true } : m))
+      );
+
+      const settings = SettingsService.getSettings();
+      // 上下文为当前消息之前的所有消息
+      const contextMessages = messages.slice(0, targetMsgIndex);
+
+      const prompt = formatContinuationChatML(
+        contextMessages,
+        existingContent,
+        settings.systemPrompt
+      );
+
+      try {
+        await LlamaService.completion(
+          prompt,
+          {
+            temperature: settings.temperature,
+            topP: settings.topP,
+            maxTokens: settings.maxTokens,
+          },
+          {
+            onToken: (newToken: string) => {
+              if (activeGenerationIdRef.current !== generationId) return;
+              currentAssistantTextRef.current += newToken;
+              const currentContent = currentAssistantTextRef.current;
+
+              setMessages((prevMessages) =>
+                prevMessages.map((msg) =>
+                  msg.id === messageId ? { ...msg, content: currentContent } : msg
+                )
+              );
+            },
+            onComplete: (stats) => {
+              if (activeGenerationIdRef.current !== generationId) return;
+              activeGenerationIdRef.current = null;
+
+              setMessages((prevMessages) => {
+                const finalMessages = prevMessages.map((msg) =>
+                  msg.id === messageId
+                    ? {
+                        ...msg,
+                        isStreaming: false,
+                        stats: {
+                          totalTokens: (msg.stats?.totalTokens || 0) + stats.totalTokens,
+                          tokensPerSecond: stats.tokensPerSecond,
+                          durationMs: (msg.stats?.durationMs || 0) + stats.durationMs,
+                          timeToFirstTokenMs: stats.timeToFirstTokenMs,
+                        },
+                      }
+                    : msg
+                );
+                sessionManager.saveActiveSessionMessages(finalMessages).catch(() => {});
+                return finalMessages;
+              });
+              isGeneratingRef.current = false;
+              setIsGenerating(false);
+            },
+            onError: (err: Error) => {
+              if (activeGenerationIdRef.current !== generationId) return;
+              activeGenerationIdRef.current = null;
+              setError(err.message);
+              isGeneratingRef.current = false;
+              setIsGenerating(false);
+              setMessages((prevMessages) => {
+                const finalMessages = prevMessages.map((msg) =>
+                  msg.id === messageId ? { ...msg, isStreaming: false } : msg
+                );
+                sessionManager.saveActiveSessionMessages(finalMessages).catch(() => {});
+                return finalMessages;
+              });
+            },
+          }
+        );
+      } catch (err: any) {
+        if (activeGenerationIdRef.current === generationId) {
+          activeGenerationIdRef.current = null;
+          setError(err?.message || '续写推理执行异常');
+          isGeneratingRef.current = false;
+          setIsGenerating(false);
+          setMessages((prevMessages) => {
+            const finalMessages = prevMessages.map((msg) =>
+              msg.id === messageId ? { ...msg, isStreaming: false } : msg
+            );
+            sessionManager.saveActiveSessionMessages(finalMessages).catch(() => {});
+            return finalMessages;
+          });
+        }
+      }
+    },
+    [messages, isGenerating]
+  );
+
+  /**
    * 删除单条消息（对齐 PocketPal）
    */
   const deleteMessage = useCallback(async (messageId: string) => {
@@ -400,6 +522,7 @@ export function useLlamaChat() {
     isGenerating,
     error,
     sendMessage,
+    continueGenerating,
     regenerateLastMessage,
     deleteMessage,
     stopGenerating,
