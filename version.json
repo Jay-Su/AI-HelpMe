@@ -1,0 +1,6 @@
+{
+  "versionCode": 12,
+  "versionName": "1.1.1",
+  "releaseNotes": "1. 彻底修复长按复制后应用自动缩入后台问题：移除了引发原生安全异常的震动调用，补全系统VIBRATE权限；\n2. 复制体验全面优化：支持长按任意气泡或点击底部操作栏一键复制，伴随原生轻量Toast提示（已复制到剪贴板）；\n3. 保持PocketPal同级丝滑秒回响应与全景深度的概念解析能力。",
+  "downloadUrl": "http://192.168.63.135:8888/app-release.apk"
+}

@@ -1,0 +1,41 @@
+﻿# Node / NPM
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React Native
+*.jsbundle
+*.bundle
+.metro-health-check*
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/.idea/
+local.properties
+*.apk
+*.aab
+*.keystore
+!android/app/debug.keystore
+
+# IDE & Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store
+Thumbs.db
+
+# Model weights & Large Binaries (Never commit to Git)
+*.gguf
+*.bin
+*.pt
+*.safetensors
+*.onnx
+
+# Temporary & Preview Files
+scratch/
+ui_design_preview.html
