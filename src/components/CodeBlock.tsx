@@ -188,6 +188,5 @@ const styles = StyleSheet.create({
     fontFamily: THEME.typography.fontMono,
     fontSize: 12.5,
     lineHeight: 19,
-    flexWrap: 'wrap',
   },
 });

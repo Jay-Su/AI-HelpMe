@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const markdownStyles = {
+const markdownStyles: any = {
   body: {
     color: '#F1F5F9',
     fontSize: 15,
@@ -434,22 +434,25 @@ const markdownStyles = {
     marginBottom: 4,
   },
   code_inline: {
-    backgroundColor: '#1E293B',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
     color: '#38BDF8',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
     fontSize: 13,
+    fontWeight: '600' as const,
     fontFamily: THEME.typography.fontMono,
   },
   bullet_list: {
     marginVertical: 4,
+    width: '100%',
   },
   ordered_list: {
     marginVertical: 4,
+    width: '100%',
   },
   list_item: {
-    marginVertical: 3,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    marginVertical: 2,
+    width: '100%',
     color: '#F1F5F9',
   },
   bullet_list_icon: {
@@ -462,10 +465,14 @@ const markdownStyles = {
   },
   bullet_list_content: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     flexDirection: 'column' as const,
   },
   ordered_list_content: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     flexDirection: 'column' as const,
   },
   blockquote: {
