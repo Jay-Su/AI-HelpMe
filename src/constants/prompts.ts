@@ -5,23 +5,23 @@ import { KnowledgeChunk } from '../knowledge';
  * AI老祖系统提示词（专为 J哥 护法）
  * 要求实事求是、详尽专业、结构清晰，杜绝胡编乱造
  */
-export const MENTOR_SYSTEM_PROMPT = `你是专业技术导师【AI老祖】。请每次亲切称呼提问者为“J哥”，严格按以下格式精炼作答：
-1. 【开门直答】：第1句话必须直接给出正面、具体的答案（如具体目录、文件、技术选型或明确结论），绝不空谈套话。
-2. 【要点展开】：提炼2~3个核心要点，按“1. 核心词：简要说明”格式展开，每点1~2句话，直击本质。
-3. 【代码克制】：若需代码仅提供核心关键片段（10行内），不堆砌冗长样板。
-总字数控制在250~300字内，为 J哥 提供干脆、实用、快速落地的解答。`;
+export const MENTOR_SYSTEM_PROMPT = `你是专业渊博的技术导师【AI老祖】。请每次回复开头亲切称呼提问者为“J哥”，为【J哥】提供详尽透彻、条理清晰的技术解答。结合核心架构原理与完整的实战工程代码，逻辑严谨，深入浅出，实事求是，切中要害。`;
 
 /**
  * Qwen2.5 纯净标准 ChatML 格式转换器
  * 1. 保留最近 4 条完整上下文（2 轮对话），绝不机械硬截断，确保模型语义完整连贯；
- * 2. 命中知识卡时自然注入权威骨架，未命中时纯净自然放行；
+ * 2. 若用户清空了提示词，则 100% 纯净放行，不注入空的 system 节点（对齐纯原生推理体验）；
  * 3. 极速 Prefill 响应（对齐 PocketPal 体验）。
  */
 export function formatChatML(
   messages: ChatMessage[],
   systemPrompt: string = MENTOR_SYSTEM_PROMPT
 ): string {
-  let prompt = `<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n`;
+  let prompt = '';
+  const trimmedSystem = systemPrompt ? systemPrompt.trim() : '';
+  if (trimmedSystem.length > 0) {
+    prompt += `<|im_start|>system\n${trimmedSystem}<|im_end|>\n`;
+  }
 
   // 严格保留最近 4 条完整消息（2 轮问答），保持完整语义，杜绝因残句产生的注意力畸变
   const recentMessages = messages.slice(-4);
@@ -51,7 +51,11 @@ export function formatContinuationChatML(
   partialAssistantContent: string,
   systemPrompt: string = MENTOR_SYSTEM_PROMPT
 ): string {
-  let prompt = `<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n`;
+  let prompt = '';
+  const trimmedSystem = systemPrompt ? systemPrompt.trim() : '';
+  if (trimmedSystem.length > 0) {
+    prompt += `<|im_start|>system\n${trimmedSystem}<|im_end|>\n`;
+  }
 
   // 历史对话上下文（最多保留最近 4 条）
   const recentMessages = contextMessages.slice(-4);
@@ -66,7 +70,13 @@ export function formatContinuationChatML(
   }
 
   // 关键：不闭合 assistant，直接带上未完成的半截内容，让模型无缝续吐！
-  prompt += `<|im_start|>assistant\n${partialAssistantContent.trimEnd()}`;
+  // 若结尾停在代码块开头标记，确保有换行符引导代码首行平滑吐出
+  let contentToAppend = partialAssistantContent || '';
+  if (/(```[a-zA-Z0-9_\-#]*)$/.test(contentToAppend.trimEnd())) {
+    contentToAppend = contentToAppend.trimEnd() + '\n';
+  }
+
+  prompt += `<|im_start|>assistant\n${contentToAppend}`;
   return prompt;
 }
 

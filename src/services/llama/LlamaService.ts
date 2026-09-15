@@ -203,12 +203,14 @@ class LlamaService {
         try {
           const completionParams: any = {
             prompt,
-            temperature: options.temperature ?? 0.7,
-            n_predict: options.maxTokens ?? 1024,
+            temperature: options.temperature ?? 0.6,
+            n_predict: options.maxTokens ?? 2048,
             top_p: options.topP ?? 0.9,
             top_k: 40,
-            penalty_repeat: 1.15,
-            penalty_last_n: 64,
+            penalty_repeat: 1.0,
+            penalty_last_n: 0,
+            penalty_freq: 0.0,
+            penalty_present: 0.0,
             stop: STOP_TOKENS,
           };
 

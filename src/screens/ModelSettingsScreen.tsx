@@ -106,8 +106,14 @@ export const ModelSettingsScreen: React.FC<ModelSettingsScreenProps> = ({ naviga
   };
 
   const handleSaveSystemPrompt = async () => {
-    await handleUpdateSetting({ systemPrompt: customPrompt.trim() || MENTOR_SYSTEM_PROMPT });
-    Alert.alert('已保存', '系统提示词已更新，将在下一次对话中生效。');
+    const nextPrompt = customPrompt.trim();
+    await handleUpdateSetting({ systemPrompt: nextPrompt });
+    Alert.alert(
+      '已保存',
+      nextPrompt
+        ? '系统提示词已更新，将在下一次对话中生效。'
+        : '系统提示词已清空，将采用微调模型 100% 纯净原生推理（无预设约束）。'
+    );
   };
 
   const handleResetSystemPrompt = async () => {

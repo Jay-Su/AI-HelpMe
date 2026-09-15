@@ -243,7 +243,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   mentorContainer: {
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
+    width: '100%',
   },
 
   userHeaderRow: {
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    maxWidth: '96%',
+    maxWidth: '100%',
   },
   userBubble: {
     backgroundColor: THEME.colors.userBubble,
@@ -304,7 +305,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 4,
     borderWidth: 1,
     borderColor: THEME.colors.borderSubtle,
-    minWidth: 180,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   mentorContentBox: {
     width: '100%',

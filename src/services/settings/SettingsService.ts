@@ -17,13 +17,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   threads: 4,
   contextSize: 2048,
   gpuLayers: 0,
-  temperature: 0.3,
+  temperature: 0.6,
   topP: 0.9,
   maxTokens: 2048,
   systemPrompt: MENTOR_SYSTEM_PROMPT,
 };
 
-const PROMPT_VERSION = 'v7_mobile_3b_agile';
+const PROMPT_VERSION = 'v8_pure_coder_unshackled';
 
 class SettingsServiceClass {
   private settings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -65,12 +65,12 @@ class SettingsServiceClass {
           this.settings.systemPrompt = MENTOR_SYSTEM_PROMPT;
           this.settings.threads = 4;
           this.settings.contextSize = 2048;
-          this.settings.temperature = 0.3;
+          this.settings.temperature = 0.6;
           StorageBridge?.saveString?.('setting_prompt_version', PROMPT_VERSION);
           StorageBridge?.saveString?.('setting_system_prompt', MENTOR_SYSTEM_PROMPT);
           StorageBridge?.saveString?.('setting_threads', '4');
           StorageBridge?.saveString?.('setting_context_size', '2048');
-          StorageBridge?.saveString?.('setting_temperature', '0.3');
+          StorageBridge?.saveString?.('setting_temperature', '0.6');
         }
       }
     } catch (e) {
