@@ -182,12 +182,14 @@ class LlamaService {
         }
         const now = Date.now();
         const idleDuration = now - lastTokenTime;
-        const ttftTimeout = firstTokenTime === null && now - startTime > 20000;
-        const tokenStallTimeout = firstTokenTime !== null && idleDuration > 12000;
+        // 首字响应超时（TTFT）：给长上下文 Prefill 与复杂思考预留 35 秒安全缓冲，杜绝过早熔断
+        const ttftTimeout = firstTokenTime === null && now - startTime > 35000;
+        // Token 生成停滞超时：已吐字后若超过 15 秒未产生新 Token，判定为停滞熔断
+        const tokenStallTimeout = firstTokenTime !== null && idleDuration > 15000;
 
         if (ttftTimeout || tokenStallTimeout) {
           console.warn(
-            `[LlamaService Watchdog] 引擎停滞检测触发（${idleDuration}ms 无新 Token），自动执行优雅熔断`
+            `[LlamaService Watchdog] 引擎停滞检测触发（${idleDuration}ms 无新 Token，TTFT: ${ttftTimeout}，Stall: ${tokenStallTimeout}），自动执行优雅熔断`
           );
           if (watchdogTimer) clearInterval(watchdogTimer);
           watchdogTimer = null;
